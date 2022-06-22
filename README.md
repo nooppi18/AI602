@@ -89,6 +89,17 @@ python generate.py --outdir=out --seeds=0-35 --class=1 \
 # Style mixing example
 python style_mixing.py --outdir=out --rows=85,100,75,458,1500 --cols=55,821,1789,293 \
     --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl
+    
+# Make N cluster center for FFHQ
+    python generate.py --outdir=out \\
+        --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
+        --multimodal=True
+        
+# Use N cluster center of FFHQ to generated images
+python generate.py --outdir=out --trunc=0.7 --seeds=600-605 \
+--network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
+--multimodal=True --multimodal_latent=[dir of cluster center file saved by running the above code]
+
 ```
 
 Outputs from the above commands are placed under `out/*.png`, controlled by `--outdir`. Downloaded network pickles are cached under `$HOME/.cache/dnnlib`, which can be overridden by setting the `DNNLIB_CACHE_DIR` environment variable. The default PyTorch extension build directory is `$HOME/.cache/torch_extensions`, which can be overridden by setting `TORCH_EXTENSIONS_DIR`.
