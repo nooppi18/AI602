@@ -81,6 +81,19 @@ def generate_images(
     # Render an image from projected W
     python generate.py --outdir=out --projected_w=projected_w.npz \\
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl
+        
+    \b
+    # Make N cluster center for FFHQ
+    python generate.py --outdir=out \\
+        --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
+        --multimodal=True
+        
+    \b
+    # Use N cluster center of FFHQ to generated images
+    python generate.py --outdir=out --trunc=0.7 --seeds=600-605 \
+    --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/ffhq.pkl
+    --multimodal=True --multimodal_latent=[dir of cluster center file saved by running the above code]
+
     """
 
     print('Loading networks from "%s"...' % network_pkl)
