@@ -43,6 +43,9 @@ def num_range(s: str) -> List[int]:
 @click.option('--noise-mode', help='Noise mode', type=click.Choice(['const', 'random', 'none']), default='const', show_default=True)
 @click.option('--projected-w', help='Projection result file', type=str, metavar='FILE')
 @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
+@click.option('--multimodal', 'use_multimodal', help='Whether to use multi-modal truncation', type=bool, default=False)
+@click.option('--multimodal_latent', 'multi_latent', help='Saved multi-modal latent')
+
 def generate_images(
     ctx: click.Context,
     network_pkl: str,
@@ -51,7 +54,9 @@ def generate_images(
     noise_mode: str,
     outdir: str,
     class_idx: Optional[int],
-    projected_w: Optional[str]
+    projected_w: Optional[str],
+    use_multimodal: bool,
+    multi_latent: str
 ):
     """Generate images using pretrained network pickle.
 
@@ -112,13 +117,59 @@ def generate_images(
         if class_idx is not None:
             print ('warn: --class=lbl ignored when running on an unconditional network')
 
+    '''multi-cluster trunctation'''
+    if use_multimodal == True:
+        if multi_latent:
+            multi_w_avg = torch.from_numpy(np.load(multi_latent)).to(device)
+            print('multi latent loaded!')
+            for seed_idx, seed in enumerate(seeds):
+                print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
+                z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+                z_w = G.mapping(z, label, truncation_psi=1)#, truncation_cutoff=truncation_cutoff)
+                min_idx = torch.norm(z_w[:,0,:] - multi_w_avg.unsqueeze(0), dim=2).argmin()
+                print(min_idx)
+                w_new = truncation_psi * z_w + (1 - truncation_psi) * multi_w_avg.unsqueeze(0)[:,min_idx,:]
+                img = G.synthesis(w_new)#, **synthesis_kwargs)
+                ##img (z, label, truncation_psi=truncation_psi, noise_mode=noise_mode, multi_latent=multi_w_avg)
+                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}_multi.png')
+
+
+        else:
+            seed = 0
+            
+            # num_latents = 100000
+            # num_clusters = 100
+
+            num_latents = 60000
+            num_clusters = 64
+
+
+
+            print('Generate all the latents')
+            zs = torch.from_numpy(np.random.RandomState(seed).randn(num_latents, G.z_dim)).to(device)
+            ws = G.mapping(zs, None)[:,0,:]
+
+            scalar = StandardScaler()
+            scalar.fit(ws.cpu())
+
+            w_scaled = scalar.transform(ws.cpu())
+
+            kmeans = KMeans(n_clusters=num_clusters, random_state = 0, init='random', verbose=1).fit(w_scaled)
+            w_avg_multi = scalar.inverse_transform(kmeans.cluster_centers_)
+            np.save(os.path.join(outdir, 'multi_modal_latent_small.npy'), w_avg_multi)
+            assert False
+
     # Generate images.
-    for seed_idx, seed in enumerate(seeds):
-        print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
-        z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
-        img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode)
-        img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-        PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
+    else:
+        for seed_idx, seed in enumerate(seeds):
+            print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
+            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+            img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode)
+            img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
+
+    '''modified until here'''
 
 
 #----------------------------------------------------------------------------
